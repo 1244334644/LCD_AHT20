@@ -15,8 +15,8 @@ int main(void)
 	lcd_clear(lcd);
 	// lcd_fillcolor(lcd, 0,0,239,319,mkcolor(255, 0, 0));
 
-	lcd_show_string(lcd, 29, 0, "Hello World!温度湿度温度湿度温度温", mkcolor(255, 255, 255), mkcolor(0, 0, 0), &font16);
-	// lcd_show_img(lcd, 0, 0, &img_welcome);
+	//lcd_show_string(lcd, 29, 0, "Hello World!温度湿度温度湿度温度温", mkcolor(255, 255, 255), mkcolor(0, 0, 0), &font16);
+	lcd_show_img(lcd, 0, 0, &img_welcome);
 	printf("aht20 init done\n");
 	printf("System started!\n");
 	

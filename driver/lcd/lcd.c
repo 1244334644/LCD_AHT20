@@ -71,6 +71,7 @@ static void spi_init(lcd_desc_t lcd)
 
 static void dma_init(lcd_desc_t lcd)
 {
+	//准备数据 -> 拉低 CS -> 配置并启动 DMA -> CPU 去做其他事 -> (DMA 完成中断) -> 检查 SPI BSY -> 拉高 CS
 	DMA_InitTypeDef DMA_InitStructure;
 	DMA_StructInit(&DMA_InitStructure);
 	 // 配置DMA参数
@@ -88,7 +89,9 @@ static void dma_init(lcd_desc_t lcd)
     DMA_InitStructure.DMA_MemoryBurst = DMA_MemoryBurst_INC8; // 存储器8字节突发传输
     DMA_InitStructure.DMA_PeripheralBurst = DMA_PeripheralBurst_Single; // 外设单次传输
     DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE); // 传输完成中断使能
-    DMA_Init(DMA1_Stream4, &DMA_InitStructure);
+    DMA_Init(DMA1_Stream4, &DMA_InitStructure);	
+	// 开启SPI的DMA发送请求（关键步骤）
+	SPI_I2S_DMACmd(lcd->SPI, SPI_I2S_DMAReq_Tx, ENABLE);
 }
 
 static void nvic_init(void)
@@ -101,7 +104,47 @@ static void nvic_init(void)
 	NVIC_Init(&NVIC_InitStructure);
 	NVIC_SetPriority(DMA1_Stream4_IRQn, 5);
 }
+// 启动DMA传输（内部处理分包，支持8位/16位模式）
+static void lcd_dma_send(void *data, uint32_t size, uint32_t width)
+{
+    uint32_t sent_len = 0;
+    
+    // 等待上一次DMA完成
+    while(DMA_GetCmdStatus(DMA1_Stream4) != DISABLE);
 
+    // 设置数据宽度（8位或16位）
+    DMA1_Stream4->CR &= ~(DMA_SxCR_PSIZE | DMA_SxCR_MSIZE);
+    if(width == DMA_PeripheralDataSize_HalfWord) {
+        DMA1_Stream4->CR |= (DMA_PeripheralDataSize_HalfWord << 11) | (DMA_MemoryDataSize_HalfWord << 13);
+    } else {
+        DMA1_Stream4->CR |= (DMA_PeripheralDataSize_Byte << 11) | (DMA_MemoryDataSize_Byte << 13);
+    }
+
+    // 分包传输（单次最大65535）
+    while(sent_len < size)
+    {
+        uint32_t current_len = size - sent_len;
+        if(current_len > 65535) current_len = 65535;
+
+        DMA_Cmd(DMA1_Stream4, DISABLE);
+        while(DMA_GetCmdStatus(DMA1_Stream4) != DISABLE);
+        
+        DMA_SetCurrDataCounter(DMA1_Stream4, current_len);
+        
+        if(width == DMA_PeripheralDataSize_HalfWord)
+            DMA1_Stream4->M0AR = (uint32_t)((uint16_t*)data + sent_len); 
+        else
+            DMA1_Stream4->M0AR = (uint32_t)((uint8_t*)data + sent_len);
+        
+        DMA_ClearFlag(DMA1_Stream4, DMA_FLAG_TCIF4);
+        dma_transfer_complete = false;
+        DMA_Cmd(DMA1_Stream4, ENABLE);
+        
+        while(!dma_transfer_complete); // 等待完成
+        
+        sent_len += current_len;
+    }
+}
 
 static void st7789_write(lcd_desc_t lcd, uint8_t reg, uint8_t* data, uint16_t len)
 {
@@ -111,6 +154,7 @@ static void st7789_write(lcd_desc_t lcd, uint8_t reg, uint8_t* data, uint16_t le
 
 	GPIO_ResetBits(lcd->Port, lcd->CSPin); // CS = 0，片选使能
 	GPIO_ResetBits(lcd->Port, lcd->DCPin); // DC = 0，命令模式
+
 
 	SPI_SendData(lcd->SPI, reg);
 	while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_TXE) == RESET); // 等待发送缓冲区空
@@ -204,7 +248,7 @@ static void lcd_set_window(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1
 // 修复颜色显示函数（16位颜色模式）
 void lcd_fillcolor(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
 {
-	unsigned int row, column;
+	// unsigned int row, column;
 
 	lcd_set_window(lcd, x0, y0, x1, y1);
 	
@@ -216,18 +260,33 @@ void lcd_fillcolor(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16
 	GPIO_ResetBits(lcd->Port, lcd->CSPin); // CS = 0，片选使能
 	GPIO_SetBits(lcd->Port, lcd->DCPin);   // DC = 1，数据模式
 	
+	// 准备一行数据（复用 dma_buffer）
+    uint16_t width = x1 - x0 + 1;
+    if(width > 240) width = 240; 
+    
+    for(int i = 0; i < width; i++) {
+        dma_buffer[i] = color;
+    }
+
+    // 按行填充
+    for(uint16_t row = 0; row < (y1 - y0 + 1); row++) {
+        lcd_dma_send(dma_buffer, width, DMA_PeripheralDataSize_HalfWord);
+    }
+
+    while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET); // 等待SPI空闲
+    GPIO_SetBits(lcd->Port, lcd->CSPin); // CS = 1
 	// 填充整个屏幕
-	for(row = 0; row < (y1 - y0 + 1); row++)
-	{
-		for(column = 0; column < (x1 - x0 + 1); column++)
-		{
-			SPI_SendData(lcd->SPI, color);
-			while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_TXE) == RESET);
-		}
-	}
-	while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET); // 等待最后的传输完成
+	// for(row = 0; row < (y1 - y0 + 1); row++)
+	// {
+	// 	for(column = 0; column < (x1 - x0 + 1); column++)
+	// 	{
+	// 		SPI_SendData(lcd->SPI, color);
+	// 		while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_TXE) == RESET);
+	// 	}
+	// }
+	// while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET); // 等待最后的传输完成
 	
-	GPIO_SetBits(lcd->Port, lcd->CSPin);   // CS = 1，片选禁能
+	// GPIO_SetBits(lcd->Port, lcd->CSPin);   // CS = 1，片选禁能
 }
 
 void lcd_clear(lcd_desc_t lcd)  // 清屏函数
@@ -407,8 +466,9 @@ void lcd_show_string(lcd_desc_t lcd,uint16_t x, uint16_t y, const char *str, uin
 
 void lcd_show_img(lcd_desc_t lcd,uint16_t x, uint16_t y, const img_t* img)
 {
-	uint32_t total_pixels = (uint32_t)img->width * img->height; // 使用uint32_t防止溢出
-	const uint8_t* pixel_data = (const uint8_t*)img->data;
+	// uint32_t total_pixels = (uint32_t)img->width * img->height; // 使用uint32_t防止溢出
+	// const uint8_t* pixel_data = (const uint8_t*)img->data;
+	uint32_t total_bytes = (uint32_t)img->width * img->height * 2; // RGB565 = 2字节/像素
 	// 设置显示窗口
 	lcd_set_window(lcd, x, y, x + img->width - 1, y + img->height - 1);
 	// 切换到数据模式
@@ -420,14 +480,19 @@ void lcd_show_img(lcd_desc_t lcd,uint16_t x, uint16_t y, const img_t* img)
 	GPIO_SetBits(lcd->Port, lcd->DCPin);   // DC = 1，数据模式
 	// 发送图像数据 - 将8位字节数据组合成16位像素
 
-	for(uint32_t i = 0; i < total_pixels; i++)
-	{
-		uint16_t pixel = (pixel_data[i * 2] << 8) | pixel_data[i * 2 + 1];
-		SPI_SendData(lcd->SPI, pixel);
-		while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_TXE) == RESET);
-	}
-	while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET); // 等待最后的传输完成
-	GPIO_SetBits(lcd->Port, lcd->CSPin);   // CS = 1，片选禁能
+	// 使用DMA发送整个图片（支持自动分包）
+    lcd_dma_send((void*)img->data, total_bytes, DMA_PeripheralDataSize_Byte);
+    
+    while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET);
+    GPIO_SetBits(lcd->Port, lcd->CSPin);
+	// for(uint32_t i = 0; i < total_pixels; i++)
+	// {
+	// 	uint16_t pixel = (pixel_data[i * 2] << 8) | pixel_data[i * 2 + 1];
+	// 	SPI_SendData(lcd->SPI, pixel);
+	// 	while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_TXE) == RESET);
+	// }
+	// while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET); // 等待最后的传输完成
+	// GPIO_SetBits(lcd->Port, lcd->CSPin);   // CS = 1，片选禁能
 
 }
 
