@@ -61,11 +61,11 @@ static void spi_init(lcd_desc_t lcd)
 	SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low;
 	SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
 	SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;
-	SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;
+	SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2;
 	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
 	// SPI_InitStructure.SPI_CRCPolynomial = 7;
 	SPI_Init(lcd->SPI, &SPI_InitStructure);
-
+	SPI_DMACmd(lcd->SPI, SPI_DMAReq_Tx, ENABLE);
 	SPI_Cmd(lcd->SPI, ENABLE);
 }
 
@@ -85,13 +85,12 @@ static void dma_init(lcd_desc_t lcd)
     DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;          // 普通模式
     DMA_InitStructure.DMA_Priority = DMA_Priority_High;   // 高优先级
     DMA_InitStructure.DMA_FIFOMode = DMA_FIFOMode_Enable; // 使能FIFO
-    DMA_InitStructure.DMA_FIFOThreshold = DMA_FIFOThreshold_Full;
-    DMA_InitStructure.DMA_MemoryBurst = DMA_MemoryBurst_INC8; // 存储器8字节突发传输
+    DMA_InitStructure.DMA_FIFOThreshold = DMA_FIFOThreshold_HalfFull; // 半满触发，减少等待
+    DMA_InitStructure.DMA_MemoryBurst = DMA_MemoryBurst_INC4; // 4字节突发，适配16位数据
     DMA_InitStructure.DMA_PeripheralBurst = DMA_PeripheralBurst_Single; // 外设单次传输
-    DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE); // 传输完成中断使能
+   
+	DMA_ITConfig(DMA1_Stream4, DMA_IT_TC, ENABLE); // 传输完成中断使能
     DMA_Init(DMA1_Stream4, &DMA_InitStructure);	
-	// 开启SPI的DMA发送请求（关键步骤）
-	SPI_I2S_DMACmd(lcd->SPI, SPI_I2S_DMAReq_Tx, ENABLE);
 }
 
 static void nvic_init(void)
@@ -102,7 +101,7 @@ static void nvic_init(void)
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;        // 子优先级0
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;           // 使能中断通道
 	NVIC_Init(&NVIC_InitStructure);
-	NVIC_SetPriority(DMA1_Stream4_IRQn, 5);
+	//NVIC_SetPriority(DMA1_Stream4_IRQn, 5);
 }
 // 启动DMA传输（内部处理分包，支持8位/16位模式）
 static void lcd_dma_send(void *data, uint32_t size, uint32_t width)
@@ -111,36 +110,47 @@ static void lcd_dma_send(void *data, uint32_t size, uint32_t width)
     
     // 等待上一次DMA完成
     while(DMA_GetCmdStatus(DMA1_Stream4) != DISABLE);
-
-    // 设置数据宽度（8位或16位）
-    DMA1_Stream4->CR &= ~(DMA_SxCR_PSIZE | DMA_SxCR_MSIZE);
-    if(width == DMA_PeripheralDataSize_HalfWord) {
-        DMA1_Stream4->CR |= (DMA_PeripheralDataSize_HalfWord << 11) | (DMA_MemoryDataSize_HalfWord << 13);
-    } else {
-        DMA1_Stream4->CR |= (DMA_PeripheralDataSize_Byte << 11) | (DMA_MemoryDataSize_Byte << 13);
-    }
-
-    // 分包传输（单次最大65535）
-    while(sent_len < size)
-    {
+    
+    // 设置数据宽度
+    // uint16_t data_size = (width == DMA_PeripheralDataSize_HalfWord) ? 2 : 1;
+    // uint32_t total_words = size ;
+    
+    // 分包传输
+    while(sent_len < size) {
         uint32_t current_len = size - sent_len;
         if(current_len > 65535) current_len = 65535;
-
-        DMA_Cmd(DMA1_Stream4, DISABLE);
-        while(DMA_GetCmdStatus(DMA1_Stream4) != DISABLE);
         
+        // 禁用DMA
+        // DMA_Cmd(DMA1_Stream4, DISABLE);
+		DMA1_Stream4->CR &= ~(uint32_t)DMA_SxCR_EN;
+        while(DMA_GetCmdStatus(DMA1_Stream4) != DISABLE);
+        // 直接操作寄存器修改数据宽度 - 不重新配置整个DMA
+        // 清除PSIZE和MSIZE位域 (PSIZE[11:10], MSIZE[13:12])
+        DMA1_Stream4->CR &= ~(DMA_SxCR_MSIZE | DMA_SxCR_PSIZE);
+        
+        if(width == DMA_PeripheralDataSize_HalfWord) {
+            // 设置为16位数据宽度: bit[11:10]=01, bit[13:12]=01
+            DMA1_Stream4->CR |= DMA_SxCR_PSIZE_0 | DMA_SxCR_MSIZE_0;
+        } else {
+            // 设置为8位数据宽度: bit[11:10]=00, bit[13:12]=00 (已清零)
+			
+        }
+        // 配置DMA
         DMA_SetCurrDataCounter(DMA1_Stream4, current_len);
         
-        if(width == DMA_PeripheralDataSize_HalfWord)
-            DMA1_Stream4->M0AR = (uint32_t)((uint16_t*)data + sent_len); 
-        else
+        if(width == DMA_PeripheralDataSize_HalfWord) {
+            DMA1_Stream4->M0AR = (uint32_t)((uint16_t*)data + sent_len);
+        } else {
             DMA1_Stream4->M0AR = (uint32_t)((uint8_t*)data + sent_len);
+        }
         
-        DMA_ClearFlag(DMA1_Stream4, DMA_FLAG_TCIF4);
-        dma_transfer_complete = false;
-        DMA_Cmd(DMA1_Stream4, ENABLE);
+        // 清除所有可能的标志位并启动DMA
+		DMA_ClearFlag(DMA1_Stream4, DMA_FLAG_TCIF4 | DMA_FLAG_HTIF4 | DMA_FLAG_TEIF4 | DMA_FLAG_DMEIF4 | DMA_FLAG_FEIF4);
+		dma_transfer_complete = false;
+		DMA_Cmd(DMA1_Stream4, ENABLE);
         
-        while(!dma_transfer_complete); // 等待完成
+        // 等待传输完成
+        while(!dma_transfer_complete);
         
         sent_len += current_len;
     }
@@ -270,11 +280,15 @@ void lcd_fillcolor(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16
 
     // 按行填充
     for(uint16_t row = 0; row < (y1 - y0 + 1); row++) {
-        lcd_dma_send(dma_buffer, width, DMA_PeripheralDataSize_HalfWord);
+        lcd_dma_send(dma_buffer, width, DMA_PeripheralDataSize_HalfWord); // width * 2 = 字节数
     }
 
     while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET); // 等待SPI空闲
     GPIO_SetBits(lcd->Port, lcd->CSPin); // CS = 1
+
+	SPI_Cmd(lcd->SPI, DISABLE);
+    SPI_DataSizeConfig(lcd->SPI, SPI_DataSize_8b);
+    SPI_Cmd(lcd->SPI, ENABLE);
 	// 填充整个屏幕
 	// for(row = 0; row < (y1 - y0 + 1); row++)
 	// {
@@ -473,12 +487,11 @@ void lcd_show_img(lcd_desc_t lcd,uint16_t x, uint16_t y, const img_t* img)
 	lcd_set_window(lcd, x, y, x + img->width - 1, y + img->height - 1);
 	// 切换到数据模式
 	SPI_Cmd(lcd->SPI, DISABLE);
-	SPI_DataSizeConfig(lcd->SPI, SPI_DataSize_16b);//直接传递16位的像素数据
+	SPI_DataSizeConfig(lcd->SPI, SPI_DataSize_8b);//直接传递8位的像素数据
 	SPI_Cmd(lcd->SPI, ENABLE);
 
 	GPIO_ResetBits(lcd->Port, lcd->CSPin); // CS = 0，片选使能
 	GPIO_SetBits(lcd->Port, lcd->DCPin);   // DC = 1，数据模式
-	// 发送图像数据 - 将8位字节数据组合成16位像素
 
 	// 使用DMA发送整个图片（支持自动分包）
     lcd_dma_send((void*)img->data, total_bytes, DMA_PeripheralDataSize_Byte);

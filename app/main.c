@@ -13,10 +13,16 @@ int main(void)
 	aht20_init(aht20);
 	lcd_init(lcd);
 	lcd_clear(lcd);
-	// lcd_fillcolor(lcd, 0,0,239,319,mkcolor(255, 0, 0));
+	
 
 	//lcd_show_string(lcd, 29, 0, "Hello World!温度湿度温度湿度温度温", mkcolor(255, 255, 255), mkcolor(0, 0, 0), &font16);
 	lcd_show_img(lcd, 0, 0, &img_welcome);
+	lcd_fillcolor(lcd, 0,0,239,319,mkcolor(255, 0, 0));
+	lcd_fillcolor(lcd, 0,0,239,319,mkcolor(0, 255, 0));
+	lcd_fillcolor(lcd, 0,0,239,319,mkcolor(0, 0, 255));
+	// lcd_fillcolor(lcd, 0,0,79,319,mkcolor(255, 0, 0));
+	// lcd_fillcolor(lcd, 79,0,159,319,mkcolor(0, 255, 0));
+	// lcd_fillcolor(lcd, 159,0,239,319,mkcolor(0, 0, 255));
 	printf("aht20 init done\n");
 	printf("System started!\n");
 	
