@@ -14,5 +14,5 @@ extern aht20_desc_t aht20;
 extern usart_desc_t usart1;
 extern lcd_desc_t lcd;
 void board_lowlevel_init(void);
-
+void TIM3_Int_Init(uint16_t arr, uint16_t psc);
 #endif

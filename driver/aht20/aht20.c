@@ -173,7 +173,7 @@ bool aht20_measure(aht20_desc_t aht20, float *temp, float *humi)
     row_temp = (((uint32_t)buf[3] & 0x0F) << 16) | ((uint32_t)buf[4] << 8) | (uint32_t)buf[5];
     *temp = row_temp * 200.0f / (float)0x100000 - 50.0f;
     *humi = row_humi * 100.0f / (float)0x100000;
-    printf("Temp:%.1f, Humi:%.1f\n", *temp, *humi);
+   // printf("Temp:%.1f, Humi:%.1f\n", *temp, *humi);
     return true;
 }
 

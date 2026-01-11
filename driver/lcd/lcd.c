@@ -196,7 +196,10 @@ static void st7789_init(lcd_desc_t lcd)
 	
 	st7789_write(lcd, 0x36, (uint8_t[]){0x00}, 1); // 内存访问控制
 	st7789_write(lcd, 0x3a, (uint8_t[]){0x55}, 1); // 16位颜色模式
-	
+	// 修改：设置横屏显示 (0x60 = 横屏, 0xA0 = 横屏180°)
+    // st7789_write(lcd, 0x36, (uint8_t[]){0x60}, 1); // 内存访问控制 - 横屏
+    // st7789_write(lcd, 0x3a, (uint8_t[]){0x55}, 1); // 16位颜色模式
+
 	st7789_write(lcd, 0xb2, (uint8_t[]){0x0c, 0x0c, 0x00, 0x33, 0x33}, 5); // 帧率控制
 	st7789_write(lcd, 0xb7, (uint8_t[]){0x35}, 1); // Gate control
 
@@ -308,6 +311,31 @@ void lcd_clear(lcd_desc_t lcd)  // 清屏函数
 	lcd_fillcolor(lcd, 0, 0, ST7789_COLUMN - 1, ST7789_LINE - 1, mkcolor(0, 0, 0));
 }
 
+void lcd_fill_area(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t *color_data)
+{
+    uint32_t total_pixels = (uint32_t)(x1 - x0 + 1) * (y1 - y0 + 1);
+    
+    lcd_set_window(lcd, x0, y0, x1, y1);
+    
+    // 切换到16位数据模式
+    SPI_Cmd(lcd->SPI, DISABLE);
+    SPI_DataSizeConfig(lcd->SPI, SPI_DataSize_16b);
+    SPI_Cmd(lcd->SPI, ENABLE);
+    
+    GPIO_ResetBits(lcd->Port, lcd->CSPin); // CS = 0
+    GPIO_SetBits(lcd->Port, lcd->DCPin);   // DC = 1，数据模式
+    
+    // 使用DMA发送颜色数据
+    lcd_dma_send(color_data, total_pixels, DMA_PeripheralDataSize_HalfWord);
+    
+    while(SPI_GetFlagStatus(lcd->SPI, SPI_FLAG_BSY) == SET);
+    GPIO_SetBits(lcd->Port, lcd->CSPin); // CS = 1
+    
+    // 恢复8位模式
+    SPI_Cmd(lcd->SPI, DISABLE);
+    SPI_DataSizeConfig(lcd->SPI, SPI_DataSize_8b);
+    SPI_Cmd(lcd->SPI, ENABLE);
+}
 
 static void lcd_show_char(lcd_desc_t lcd, uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bgcolor, const font_t* font)
 {

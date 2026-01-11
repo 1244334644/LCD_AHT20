@@ -15,5 +15,5 @@ void lcd_fillcolor(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16
 void lcd_clear(lcd_desc_t lcd);  // ÇåÆÁº¯Êý
 void lcd_show_string(lcd_desc_t lcd,uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bgcolor, const font_t* font);
 void lcd_show_img(lcd_desc_t lcd,uint16_t x, uint16_t y, const img_t* img);
-
+void lcd_fill_area(lcd_desc_t lcd, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t *color_data);
 #endif // !__LCD_H_
