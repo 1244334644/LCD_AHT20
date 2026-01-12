@@ -29,10 +29,6 @@ virtualFolder:
           files:
             - path: driver/aht20/aht20.c
           folders: []
-        - name: delay
-          files:
-            - path: driver/delay/delay.c
-          folders: []
         - name: usart
           files:
             - path: driver/usart/usart.c
@@ -325,34 +321,6 @@ virtualFolder:
             - path: third_lib/lvgl/lvgl-8.3.10/lv_conf.h
             - path: third_lib/lvgl/lvgl-8.3.10/lvgl.h
           folders: []
-        - name: lvgl_demo_benchmark
-          files:
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/img_benchmark_cogwheel_alpha16.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/img_benchmark_cogwheel_argb.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/img_benchmark_cogwheel_chroma_keyed.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/img_benchmark_cogwheel_indexed16.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/img_benchmark_cogwheel_rgb.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/img_benchmark_cogwheel_rgb565a8.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/lv_font_bechmark_montserrat_12_compr_az.c.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/lv_font_bechmark_montserrat_16_compr_az.c.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/assets/lv_font_bechmark_montserrat_28_compr_az.c.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/benchmark/lv_demo_benchmark.c
-          folders: []
-        - name: lvgl_demo_stress
-          files:
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/stress/lv_demo_stress.c
-          folders: []
-        - name: lvgl_demo_widgets
-          files:
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/widgets/assets/img_clothes.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/widgets/assets/img_demo_widgets_avatar.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/widgets/assets/img_lvgl_logo.c
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/widgets/lv_demo_widgets.c
-          folders: []
-        - name: lvgl_demo_keypad
-          files:
-            - path: third_lib/lvgl/lvgl-8.3.10/demos/keypad_encoder/lv_demo_keypad_encoder.c
-          folders: []
         - name: USER
           files: []
           folders:
@@ -372,6 +340,15 @@ virtualFolder:
               files:
                 - path: third_lib/custom/custom.c
               folders: []
+        - name: FreeRTOS
+          files:
+            - path: third_lib/FreeRTOS/list.c
+            - path: third_lib/FreeRTOS/queue.c
+            - path: third_lib/FreeRTOS/tasks.c
+            - path: third_lib/FreeRTOS/timers.c
+            - path: third_lib/FreeRTOS/portable/heap_4.c
+            - path: third_lib/FreeRTOS/portable/port.c
+          folders: []
 dependenceList: []
 outDir: build
 miscInfo:
@@ -393,7 +370,6 @@ targets:
         - app
         - driver
         - driver/aht20
-        - driver/delay
         - driver/usart
         - driver/lcd
         - app/font
@@ -401,12 +377,14 @@ targets:
         - third_lib/lvgl/lvgl-8.3.10
         - third_lib/lvgl/lvgl-8.3.10/src
         - third_lib/lvgl/lvgl-8.3.10/examples/porting
-        - third_lib/lvgl/lvgl-8.3.10/demos/widgets
         - third_lib/custom
         - third_lib/generated
         - third_lib/generated/guider_customer_fonts
         - third_lib/generated/guider_fonts
         - third_lib/generated/images
+        - third_lib/FreeRTOS
+        - third_lib/FreeRTOS/include
+        - third_lib/FreeRTOS/portable
       libList: []
     excludeList: []
     toolchain: AC5

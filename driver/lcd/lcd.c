@@ -4,7 +4,9 @@
 #include <string.h>
 #include "lcd.h"
 #include "lcd_desc.h"
-#include "delay.h"
+// #include "delay.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "font.h"
 #include "usart.h"
 #include "img.h"
@@ -187,12 +189,12 @@ static void st7789_init(lcd_desc_t lcd)
 {
 	// 复位LCD
 	GPIO_ResetBits(lcd->Port, lcd->RSTPin); // RST = 0，复位
-	cpu_delay_ms(100);
+	vTaskDelay(pdMS_TO_TICKS(100));
 	GPIO_SetBits(lcd->Port, lcd->RSTPin);   // RST = 1，释放复位
-	cpu_delay_ms(100);
+	vTaskDelay(pdMS_TO_TICKS(100));
 
 	st7789_write(lcd, 0x11, NULL, 0); // 退出睡眠模式
-	cpu_delay_ms(120);
+	vTaskDelay(pdMS_TO_TICKS(120));
 	
 	st7789_write(lcd, 0x36, (uint8_t[]){0x00}, 1); // 内存访问控制
 	st7789_write(lcd, 0x3a, (uint8_t[]){0x55}, 1); // 16位颜色模式
@@ -216,10 +218,10 @@ static void st7789_init(lcd_desc_t lcd)
 	st7789_write(lcd, 0xe1, (uint8_t[]){0xD0,0x0D,0x14, 0x0B,0x0B,0x07, 0x3A,0x44,0x50, 0x08,0x13,0x13, 0x2D,0x32}, 14);
 
 	st7789_write(lcd, 0x21, NULL, 0); // 反显关闭（正常显示）
-	cpu_delay_ms(10);
+	vTaskDelay(pdMS_TO_TICKS(10));
 	
 	st7789_write(lcd, 0x29, NULL, 0); // 显示开启
-	cpu_delay_ms(20);
+	vTaskDelay(pdMS_TO_TICKS(20));
 }
 
 void lcd_init(lcd_desc_t lcd)

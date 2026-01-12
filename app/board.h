@@ -4,7 +4,7 @@
 #include "led.h"
 #include "aht20.h"
 #include "usart.h"
-#include "delay.h"
+// #include "delay.h"
 #include "lcd.h"
 #include "font.h"
 #include "img.h"

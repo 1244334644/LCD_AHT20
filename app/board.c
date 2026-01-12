@@ -7,7 +7,7 @@
 #include "usart.h"
 #include "lcd_desc.h"
 #include "lcd.h"
-#include "delay.h"
+// #include "delay.h"
 static struct led_desc led1_desc = {GPIOA, GPIO_Pin_6, Bit_RESET, Bit_SET};
 static struct led_desc led2_desc = {GPIOA, GPIO_Pin_7, Bit_RESET, Bit_SET};
 

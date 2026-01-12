@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include "aht20.h"
 #include "aht20_desc.h"
-#include "delay.h"
+// #include "delay.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "usart.h"
 #include "math.h"
 //I2C1  CLK->PB6
@@ -43,7 +45,7 @@ void aht20_init(aht20_desc_t aht20)
 {
     aht20_io_init(aht20);
     aht20_I2C_init(aht20);
-    cpu_delay_ms(40);
+    vTaskDelay(pdMS_TO_TICKS(40));
 }
 
 static bool I2C_Start(aht20_desc_t aht20)
@@ -58,19 +60,19 @@ static bool I2C_Start(aht20_desc_t aht20)
             
             // 强制释放总线
             I2C_GenerateSTOP(aht20->I2C, ENABLE);
-            cpu_delay_us(100);
+            vTaskDelay(pdMS_TO_TICKS(100));
             
             // 如果仍然繁忙，重置I2C外设
             if(I2C_GetFlagStatus(aht20->I2C, I2C_FLAG_BUSY))
             {
                 I2C_Cmd(aht20->I2C, DISABLE);
-                cpu_delay_us(10);
+                vTaskDelay(pdMS_TO_TICKS(10));
                 I2C_Cmd(aht20->I2C, ENABLE);
-                cpu_delay_us(10);
+                vTaskDelay(pdMS_TO_TICKS(10));
             }
             break;
         }
-        cpu_delay_us(1);
+        vTaskDelay(pdMS_TO_TICKS(1));   
     }
     
     // 清除所有错误标志
@@ -98,7 +100,7 @@ static void I2C_Stop(aht20_desc_t aht20)
 {
     I2C_GenerateSTOP(aht20->I2C, ENABLE);
     while(I2C_GetFlagStatus(aht20->I2C, I2C_FLAG_STOPF));
-    cpu_delay_us(100);  // 增加100微秒延时
+    vTaskDelay(pdMS_TO_TICKS(100));  // 增加100微秒延时 
 }
 
 // AHT20的7位地址是 0x38
@@ -153,18 +155,18 @@ bool aht20_measure(aht20_desc_t aht20, float *temp, float *humi)
     if(((buf[0] >> 3) & 0x01) != 1)
     {
         aht20_write(aht20, csh, 3);
-        cpu_delay_ms(10);
+        vTaskDelay(pdMS_TO_TICKS(10));  
     }
 
     uint8_t cmd[3] = {0xAC, 0x33, 0x00};
     aht20_write(aht20, cmd, 3);
-    cpu_delay_ms(80);
+    vTaskDelay(pdMS_TO_TICKS(80));  
     aht20_read(aht20, buf, 6);
     
     // 等待传感器测量完成（bit7为0表示就绪）
     while(((buf[0] >> 7) & 0x01) == 1)
     {
-        cpu_delay_ms(10);
+        vTaskDelay(pdMS_TO_TICKS(10));  
         aht20_read(aht20, buf, 6);
     }
     
